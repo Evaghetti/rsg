@@ -33,20 +33,29 @@ def usage():
         # we change the usage message accordingly
         program_name = f"python3 {argv[0]}"
 
-    print(f"""Usage: {program_name} <ip address> <port> [shell type]
+    print(f"""Usage: {program_name} <ip address or interface> <port> [shell type]
 
 Examples:
     {program_name} 127.0.0.1 4444
-    {program_name} 192.168.0.1 443 bash""")
+    {program_name} 192.168.0.1 443 bash
+    {program_name} wlan0 9001""")
     exit_code(-1)
 
 
 def verify_ip(ipaddr):
     output = check_output(['ip', 'address']).decode()
     candidate_ips = [ip for ip in findall(r"(?:\d{1,3}\.){3}\d{1,3}", output) if '255' not in ip]
-
     return ipaddr in candidate_ips
 
+def ip_from_interface(interface):
+    output = check_output(["ip", "link", "show"]).decode()
+    interfaces = [interface.split(" ")[-1] for interface in findall(r"\w+:\s+[a-z0-1]+", output)] 
+    if interface not in interfaces:
+        return False
+
+    output = check_output(["ip", "addr", "show", interface]).decode()
+    ipaddr = findall(r"inet \d+\.\d+\.\d+\.\d+", output)[0].split(" ")[-1]
+    return ipaddr 
 
 def handler(signum, frame):
     print()
@@ -63,8 +72,10 @@ def main():
     ipaddr, port = argv[1], argv[2]
 
     if not verify_ip(ipaddr):
-        print(RED("Invalid IP address! Exiting."))
-        exit_code(-1)
+        ipaddr = ip_from_interface(ipaddr)
+        if not ipaddr:
+            print(RED("Invalid IP address or interface! Exiting."))
+            exit_code(-1)
 
     # this dictionary will contain all possible shells in the form:
     # { shell_type: [ (desc0, cmd0), (desc1, cmd1), ... ], ... }
